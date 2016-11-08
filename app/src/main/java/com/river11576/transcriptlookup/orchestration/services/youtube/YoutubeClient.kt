@@ -42,7 +42,10 @@ class YoutubeClient (val apiKey: String) {
             .execute().items
 
     private val youtubeClient = YouTube(NetHttpTransport(), JacksonFactory(), { })
-    private val PART = "snippet"
+
+    companion object {
+        private val PART = "snippet"
+    }
 }
 
 class YoutubeTranscriptService: Provider<Transcript>, AnkoLogger {

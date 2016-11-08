@@ -29,45 +29,56 @@ import java.util.*
 import javax.inject.Inject
 import kotlin.properties.Delegates
 
-class TranscriptPlayer(val createViewHolder: () -> CaptionViewHolder): AnkoComponent<Context>, RecyclerView.Adapter<RecyclerView.ViewHolder>(), AnkoLogger {
+class TranscriptPlayer(playbackTimeEvents: Observable<Double>, val createViewHolder: () -> CaptionViewHolder)
+        : AnkoComponent<Context>, RecyclerView.Adapter<RecyclerView.ViewHolder>(), AnkoLogger
+    {
+    init {
+        playbackTimeEvents.subscribe {
+            transcript?.captions?.indexOfFirst {
+                caption -> caption.timestamp >= 1000 * it
+            }?.let {
+                var viewHolder = captionPresenter(highlight)
+                viewHolder?.highlighted = false
+                highlight = it
+
+                listView.layoutManager.scrollToPosition(it)
+                viewHolder = captionPresenter(it)
+                viewHolder?.highlighted = true
+            }
+        }
+    }
     var transcript by Delegates.observable(null as Transcript?) {
         p, o, n -> notifyDataSetChanged()
     }
 
-    var highlight: Int = 0
+    var highlight: Int = 0; private set
 
     override fun createView(ui: AnkoContext<Context>) = with(ui) {
         recyclerView {
-            listView = this
+            listView = this // because assignment is not an expression in kotlin
             layoutManager = LinearLayoutManager(ctx)
             adapter = this@TranscriptPlayer
         }
     }
 
-    fun setPosition(pos: Double) {
-info("<<<<<<<<<<<<<<<<<<")
-        transcript?.captions?.indexOfFirst {
-            it.timestamp >= pos
-        }?.let {
-            highlight = it
-info(">>>>>>>>>>>>>>>>>" + it)
-            listView.apply {
-                val viewHolder = findViewHolderForAdapterPosition(it)
-                (viewHolder as CaptionViewHolder).highlighted = true
-                layoutManager.scrollToPosition(it)
-            }
-        }
-    }
-
     private lateinit var listView: RecyclerView
+    private fun captionPresenter(i: Int) = listView.findViewHolderForAdapterPosition(i) as CaptionPresenter?
+
+    private fun caption(i: Int) = transcript?.captions?.get(i)
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder?, i: Int) {
-        (holder as CaptionViewHolder).apply {
-            caption = transcript?.captions?.get(i)
+        (holder as CaptionPresenter).apply {
+            caption = caption(i)
             highlighted = highlight == i
         }
     }
-    override fun onCreateViewHolder(parent: ViewGroup?, type: Int) = createViewHolder()
+
+    val captionSelectedEvents: Observable<Caption> = PublishSubject.create()
+    override fun onCreateViewHolder(parent: ViewGroup?, type: Int) = createViewHolder().apply {
+        itemView.onClick {
+            (captionSelectedEvents as PublishSubject).onNext(caption(adapterPosition))
+        }
+    }
 
     override fun getItemCount() = transcript?.run { captions?.size } ?: 0
 }
@@ -79,7 +90,7 @@ abstract class CaptionPresenter(v: View): RecyclerView.ViewHolder(v) {
 
 class CaptionViewHolder(ctx: Context): CaptionPresenter(LinearLayout(ctx)) {
     init {
-        (itemView as LinearLayout).apply {
+        (itemView as ViewGroup).apply {
             title = textView()
         }
     }
@@ -87,7 +98,7 @@ class CaptionViewHolder(ctx: Context): CaptionPresenter(LinearLayout(ctx)) {
     private var title: TextView? = null
 
     override var highlighted by Delegates.observable(false) {
-        p, o, it -> title?.backgroundColor = if(it) Color.YELLOW else Color.WHITE
+        p, o, it -> itemView.backgroundColor = if(it) Color.YELLOW else Color.WHITE
     }
 
     override var caption by Delegates.observable(null as Caption?) {
@@ -114,11 +125,23 @@ class YoutubePlayer(val uri: String, val startAt: Double? = null): AnkoComponent
 
     private lateinit var yt: YoutubePlayerView
     override fun onReady() {
-        startAt?.doAsync { uiThread { yt.play() } }
+        startAt?.run {
+            yt.post{
+                yt.play()
+                seek(startAt)
+            }
+        }
+    }
+
+    fun seek(position: Double) {
+        yt.seekToMillis(position/1000) //3rd library's naming is great, isn't it?
     }
 
     val timeEvents: Observable<Double> = PublishSubject.create()
-    override fun onCurrentSecond(second: Double) = (timeEvents as PublishSubject).onNext(second)
+
+    override fun onCurrentSecond(second: Double) {
+        yt.post { (timeEvents as PublishSubject).onNext(second) }
+    }
 
     override fun onStateChange(state: YoutubePlayerView.STATE?) { }
 
@@ -139,17 +162,21 @@ class PlayerScreen(props: Props): AnkoComponent<Activity>, UseCaseFacilitator {
 
     override fun createView(ui: AnkoContext<Activity>) = with(ui) {
         verticalLayout {
-            val transcriptPlayer = TranscriptPlayer { CaptionViewHolder(context) }
-            mount(YoutubePlayer(uri, .0)) {
-                timeEvents.subscribe { transcriptPlayer.setPosition(it) }
-            }
-            mount(transcriptPlayer) {
-                Observable.fromCallable { interactor.getTranscript(uri, "en") }
-                    .subscribeOn(Schedulers.io())
-                    .observeOn(AndroidSchedulers.mainThread())
-                    .subscribe { transcript = it }
+            var youtubePlayer = YoutubePlayer(uri, .0)
+            var transcriptPlayer = TranscriptPlayer(youtubePlayer.timeEvents) { CaptionViewHolder(context) }
 
-            }
+            mount(youtubePlayer)
+            mount(transcriptPlayer)
+
+            Observable.fromCallable { interactor.getTranscript(uri, "en") }
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe { transcriptPlayer.transcript = it }
+
+            transcriptPlayer.captionSelectedEvents
+                .subscribe {
+                    youtubePlayer.seek(it.timestamp.toDouble())
+                }
         }
     }
 }

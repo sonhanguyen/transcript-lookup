@@ -33,11 +33,15 @@ open class Transcript(): RealmObject() {
 
 open class Caption(): RealmObject() {
     var text = ""
-    var timestamp = 0f
-    var duration = 0f
+    var timestamp: Int = 0
+    var duration: Int = 0
+
+    private companion object {
+        fun s2ms(second: Float) = (second * 1000).toInt()
+    }
 
     constructor(text: String, start: Float, duration: Float): this() {
-        this.text = text; timestamp = start; this.duration = duration
+        this.text = text; timestamp = s2ms(start); this.duration = s2ms(duration)
     }
 }
 

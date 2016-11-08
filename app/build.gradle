@@ -56,14 +56,14 @@ android {
 }
 
 def anko_version = '0.9'
-dependencies { // stock dependencies
+dependencies {
     compile fileTree(dir: 'libs', include: ['*.jar'])
     testCompile 'junit:junit:4.12'
     compile 'com.android.support:appcompat-v7:23.4.0'
     compile 'com.android.support:design:23.4.0'
-
+    // stock dependencies
     compile "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-    // compile 'com.squareup.flow:flow:1.0.0-alpha'
+
     compile "org.jetbrains.anko:anko-sdk15:$anko_version"
     compile "org.jetbrains.anko:anko-recyclerview-v7:$anko_version"
 }
