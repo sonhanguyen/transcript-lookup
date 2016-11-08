@@ -1,0 +1,76 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+apply plugin: 'realm-android'
+
+kapt {
+    generateStubs = true
+    arguments {
+        arg("androidManifestFile", variant.outputs[0].processResourcesTask.manifestFile)
+    }
+}
+
+dependencies {
+    compile 'com.jaedongchicken:ytplayer:1.2.0'
+    compile 'com.google.apis:google-api-services-youtube:v3-rev176-1.22.0'
+    //compile 'com.google.api-client:google-api-client:1.22.0'
+    //compile 'com.google.android.gms:play-services-auth:9.2.1'
+
+    compile 'com.squareup.flow:flow:1.0.0-alpha2'
+
+    compile 'com.google.dagger:dagger:2.4'
+    kapt 'com.google.dagger:dagger-compiler:2.4'
+    provided 'org.glassfish:javax.annotation:10.0-b28'
+
+    compile 'io.reactivex:rxandroid:1.1.0'
+
+    compile('com.squareup.retrofit2:converter-simplexml:2.1.0') {
+        exclude group: 'xpp3', module: 'xpp3'
+        exclude group: 'stax', module: 'stax-api'
+        exclude group: 'stax', module: 'stax'
+    }
+
+    compile 'com.squareup.retrofit2:retrofit:2.1.0'
+    compile 'com.squareup.retrofit2:adapter-rxjava:2.0.2'
+
+}
+
+
+android {
+    compileSdkVersion 23
+    buildToolsVersion '23.0.3'
+
+    defaultConfig {
+        applicationId 'com.river11576.transcriptlookup'
+        minSdkVersion 15
+        targetSdkVersion 23
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+def anko_version = '0.9'
+dependencies { // stock dependencies
+    compile fileTree(dir: 'libs', include: ['*.jar'])
+    testCompile 'junit:junit:4.12'
+    compile 'com.android.support:appcompat-v7:23.4.0'
+    compile 'com.android.support:design:23.4.0'
+
+    compile "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    // compile 'com.squareup.flow:flow:1.0.0-alpha'
+    compile "org.jetbrains.anko:anko-sdk15:$anko_version"
+    compile "org.jetbrains.anko:anko-recyclerview-v7:$anko_version"
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    jcenter()
+}
+
