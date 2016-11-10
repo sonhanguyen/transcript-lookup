@@ -19,14 +19,14 @@ import javax.inject.Singleton
 
 @Module(includes = arrayOf(RepositoryModule::class, StorageModule::class))
 interface OrchestrationModule {
-    @Singleton @Binds fun bindToService(service: Youtube): UseCases
+    @Binds fun bindToService(service: Youtube): UseCases
 }
 
 @Module
 class StorageModule {
     enum class Stores { INMEMORY }
 
-    @Provides @Singleton fun provideRealm(context: Context): Single<Realm> =
+    @Provides fun provideRealm(context: Context): Single<Realm> =
         RealmProvider(context).getRealm(AndroidSchedulers.mainThread(), Stores.INMEMORY)!!
 }
 

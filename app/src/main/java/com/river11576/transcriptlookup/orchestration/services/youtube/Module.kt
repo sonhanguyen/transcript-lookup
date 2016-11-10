@@ -15,8 +15,8 @@ class Youtube @Inject constructor(var transcripts: TranscriptRepository, var rea
         val client = YoutubeClient("AIzaSyD_tyTzzuvYLBlLsAilZsQGIsloVtAFE04")
     }
 
-    override fun search(query: String, lang: String, page: String?): QueryResult {
-        val result = client.search(query, lang, pageToken = page, cc = true)
+    override fun search(query: String, lang: String, pageSize: Int, page: String?): QueryResult {
+        val result = client.search(query, pageSize, lang, pageToken = page, cc = true)
         return realm
             .observeOn(AndroidSchedulers.mainThread())
             .map { realm ->

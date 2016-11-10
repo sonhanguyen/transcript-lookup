@@ -29,9 +29,17 @@ import java.util.*
 import javax.inject.Inject
 import kotlin.properties.Delegates
 
-class TranscriptPlayer(playbackTimeEvents: Observable<Double>, val createViewHolder: () -> CaptionViewHolder)
-        : AnkoComponent<Context>, RecyclerView.Adapter<RecyclerView.ViewHolder>(), AnkoLogger
+class TranscriptPlayer(playbackTimeEvents: Observable<Double>, val itemPresenterFactory: () -> CaptionPresenter):
+        AnkoComponent<Context>,
+        RecyclerView.Adapter<TranscriptPlayer.CaptionPresenter>(),
+        AnkoLogger
     {
+
+    abstract class CaptionPresenter(v: View): RecyclerView.ViewHolder(v) {
+        abstract var caption: Caption?
+        abstract var highlighted: Boolean
+    }
+
     init {
         playbackTimeEvents.subscribe {
             transcript?.captions?.indexOfFirst {
@@ -55,7 +63,7 @@ class TranscriptPlayer(playbackTimeEvents: Observable<Double>, val createViewHol
 
     override fun createView(ui: AnkoContext<Context>) = with(ui) {
         recyclerView {
-            listView = this // because assignment is not an expression in kotlin
+            listView = this // assignment is not an expression in kotlin, otherwise It could've bee listView = recycleView { .. }
             layoutManager = LinearLayoutManager(ctx)
             adapter = this@TranscriptPlayer
         }
@@ -66,15 +74,15 @@ class TranscriptPlayer(playbackTimeEvents: Observable<Double>, val createViewHol
 
     private fun caption(i: Int) = transcript?.captions?.get(i)
 
-    override fun onBindViewHolder(holder: RecyclerView.ViewHolder?, i: Int) {
-        (holder as CaptionPresenter).apply {
+    override fun onBindViewHolder(presenter: CaptionPresenter, i: Int) {
+        with(presenter) {
             caption = caption(i)
             highlighted = highlight == i
         }
     }
 
     val captionSelectedEvents: Observable<Caption> = PublishSubject.create()
-    override fun onCreateViewHolder(parent: ViewGroup?, type: Int) = createViewHolder().apply {
+    override fun onCreateViewHolder(parent: ViewGroup?, type: Int) = itemPresenterFactory().apply {
         itemView.onClick {
             (captionSelectedEvents as PublishSubject).onNext(caption(adapterPosition))
         }
@@ -83,12 +91,7 @@ class TranscriptPlayer(playbackTimeEvents: Observable<Double>, val createViewHol
     override fun getItemCount() = transcript?.run { captions?.size } ?: 0
 }
 
-abstract class CaptionPresenter(v: View): RecyclerView.ViewHolder(v) {
-    abstract var caption: Caption?
-    abstract var highlighted: Boolean
-}
-
-class CaptionViewHolder(ctx: Context): CaptionPresenter(LinearLayout(ctx)) {
+class CaptionViewHolder(ctx: Context): TranscriptPlayer.CaptionPresenter(LinearLayout(ctx)) {
     init {
         (itemView as ViewGroup).apply {
             title = textView()
@@ -154,21 +157,20 @@ class YoutubePlayer(val uri: String, val startAt: Double? = null): AnkoComponent
     override fun logs(log: String?) { debug(log) }
 }
 
-class PlayerScreen(props: Props): AnkoComponent<Activity>, UseCaseFacilitator {
-    class Props(vararg tuples: Pair<String, Any>): HashMap<String, Any>(mapOf(*tuples))
-    val uri: String by props
+class PlayerScreen(val props: Key): AnkoComponent<Activity>, UseCaseFacilitator {
+    class Key(val uri: String)
 
     @Inject override lateinit var interactor: UseCases
 
     override fun createView(ui: AnkoContext<Activity>) = with(ui) {
         verticalLayout {
-            var youtubePlayer = YoutubePlayer(uri, .0)
-            var transcriptPlayer = TranscriptPlayer(youtubePlayer.timeEvents) { CaptionViewHolder(context) }
+            val youtubePlayer = YoutubePlayer(props.uri, .0)
+            val transcriptPlayer = TranscriptPlayer(youtubePlayer.timeEvents) { CaptionViewHolder(context) }
 
             mount(youtubePlayer)
             mount(transcriptPlayer)
 
-            Observable.fromCallable { interactor.getTranscript(uri, "en") }
+            Observable.fromCallable { interactor.getTranscript(props.uri, "en") }
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe { transcriptPlayer.transcript = it }

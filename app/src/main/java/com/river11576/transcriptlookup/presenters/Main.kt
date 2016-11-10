@@ -2,11 +2,13 @@ package com.river11576.transcriptlookup.presenters
 
 import android.app.Activity
 import android.content.Context
+import com.facebook.drawee.backends.pipeline.Fresco
 import com.river11576.transcriptlookup.domain.UseCases
 import com.river11576.transcriptlookup.orchestration.OrchestrationModule
 import com.river11576.transcriptlookup.presenters.screens.PlayerScreen
 import com.river11576.transcriptlookup.presenters.screens.SearchScreen
 import dagger.Component
+import dagger.Module
 import dagger.Provides
 import flow.Dispatcher
 import flow.Flow
@@ -19,6 +21,7 @@ import javax.inject.Singleton
 class Main: Activity() {
     override fun attachBaseContext(baseContext: Context) {
         super.attachBaseContext(Router(this).install(baseContext))
+        Fresco.initialize(this)
     }
 
     override fun onBackPressed() {
@@ -27,21 +30,19 @@ class Main: Activity() {
 }
 
 class Router(private val activity: Activity): Dispatcher {
-    private val injector by lazy {
-        DaggerRootComponent.builder().appModule(AppModule(activity)).build()
-    }
+    private val injector = DaggerRootComponent.builder().appModule(AppModule(activity)).build()
 
     fun install(baseContext: Context) =
         Flow.configure(baseContext, activity)
             .dispatcher(this)
-            .defaultKey(null)
+            .defaultKey(SearchScreen.Key())
             .install()
 
     override fun dispatch(traversal: Traversal, callback: TraversalCallback) {
         val key = traversal.destination.top<Any>()
         val component: AnkoComponent<Activity> = when(key) {
-            is PlayerScreen.Props -> PlayerScreen(key).apply { injector.inject(this) }
-            else -> SearchScreen().apply { injector.inject(this) }
+            is PlayerScreen.Key -> PlayerScreen(key).apply { injector.inject(this) }
+            else -> SearchScreen(key as SearchScreen.Key).apply { injector.inject(this) }
         }
 
         component.setContentView(activity)
@@ -50,7 +51,7 @@ class Router(private val activity: Activity): Dispatcher {
     }
 }
 
-@dagger.Module
+@Module
 class AppModule(val activity: Activity) {
     @Provides fun mainActivity(): Context = activity
 }

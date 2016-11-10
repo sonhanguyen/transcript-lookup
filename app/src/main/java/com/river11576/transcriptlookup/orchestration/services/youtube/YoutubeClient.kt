@@ -16,6 +16,7 @@ class YoutubeClient (val apiKey: String) {
     }
 
     fun search(query: String,
+               maxResults: Int,
                lang: String? = "en",
                videoCaption: CaptionFilter = lang?.let { CaptionFilter.CC } ?: CaptionFilter.ANY,
                cc: Boolean = false,
@@ -24,6 +25,7 @@ class YoutubeClient (val apiKey: String) {
         var search = youtubeClient.search()
                 .list(PART)
                 .setKey(apiKey)
+                .set("maxResults", maxResults.toLong())
                 .set("type", "video")
                 .set("q", if (cc) "\"$query\", cc" else query)
 

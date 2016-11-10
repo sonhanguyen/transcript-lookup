@@ -11,6 +11,7 @@ import android.widget.FrameLayout
 import org.jetbrains.anko.AnkoComponent
 import org.jetbrains.anko.AnkoContext
 import org.jetbrains.anko.setContentView
+import org.jetbrains.anko.wrapContent
 import rx.Completable
 import rx.subjects.AsyncSubject
 
@@ -29,22 +30,23 @@ fun <T: AnkoComponent<out Context>> ViewGroup.mount(component: T, onMount: (T.()
         onMount?.invoke(component)
     }
 
-class EventEmitterWrapper<T: View>(val wrapped: T): FrameLayout(wrapped.context) {
+class EventEmitterWrapper<T: View>(wrapped: T): FrameLayout(wrapped.context) {
     init {
-        val lparams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT)
-        layoutParams = wrapped.layoutParams?:lparams
+        layoutParams = wrapped.layoutParams
+            ?:LayoutParams(wrapContent, wrapContent)
+
         super.addView(wrapped, layoutParams)
     }
 
     val detachEvent by lazy { Completable.fromObservable(mDetachEvent) }
-    fun keyPressed(handle: (KeyEvent) -> Boolean) { keyPressedCallback = handle }
-    var keyPressedCallback: (KeyEvent) -> Boolean = { false }; private set
+    fun interceptKeyEvent(handle: (KeyEvent) -> Boolean) { keyEventCallback = handle }
+    var keyEventCallback: (KeyEvent) -> Boolean = { false }; private set
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         mDetachEvent.onCompleted()
     }
-    override fun onKeyPreIme(k: Int, e: KeyEvent): Boolean = keyPressedCallback(e)
+    override fun onKeyPreIme(code: Int, e: KeyEvent): Boolean = keyEventCallback(e)
 
     private val mDetachEvent by lazy { AsyncSubject.create<Nothing>() }
 }
@@ -53,7 +55,7 @@ fun <T: View> ViewManager.withHooks(view: T, provideHook: EventEmitterWrapper<T>
     try { removeView(view) } // undo anko dsl method's side effect in case view was created that way
     catch(notCritical: Exception) { }
     return EventEmitterWrapper(view).let {
-        addView(it, view.layoutParams)
+        addView(it, it.layoutParams)
         it.apply(provideHook)
     }
 }

@@ -46,7 +46,7 @@ open class Caption(): RealmObject() {
 }
 
 data class QueryResult(
-    var results: List<Track>,
-    var count: Int = 0,
-    var nextPageToken: String? = null
+        var results: List<Track>,
+        var total: Int = 0,
+        var nextPageToken: String? = null
 )

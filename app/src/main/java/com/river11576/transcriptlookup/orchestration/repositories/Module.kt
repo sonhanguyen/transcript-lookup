@@ -13,7 +13,7 @@ import javax.inject.Singleton
 
 @Module
 class RepositoryModule {
-    @Provides @Singleton fun provideTranscriptRepo(realm: Single<Realm>): TranscriptRepository =
+    @Provides fun provideTranscriptRepo(realm: Single<Realm>): TranscriptRepository =
         TranscriptRepositoryImpl(YoutubeTranscriptService(), TranscriptCache(realm))
 }
 
