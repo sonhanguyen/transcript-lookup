@@ -29,10 +29,11 @@ class YoutubeClient (val apiKey: String) {
                 .set("type", "video")
                 .set("q", if (cc) "\"$query\", cc" else query)
 
-        if (CaptionFilter.CC == videoCaption) search = search
-                .set("videoCaption", videoCaption.availability)
+        if (CaptionFilter.CC == videoCaption)
+            search = search.set("videoCaption", videoCaption.availability)
 
-        lang?.run { search = search.set("relevanceLanguage", this) }
+        pageToken?.let { search = search.set("pageToken", it) }
+        lang?.let { search = search.set("relevanceLanguage", it) }
 
         return search.execute()
     }

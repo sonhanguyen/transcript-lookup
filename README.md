@@ -1,4 +1,4 @@
-My learning project in getting back to Android development: an app that searches for youtube video and play them with transcript. It surely is lame, but the point is rather to investigate modern Android (libraries)[http://github.com/sonhanguyen/transcript-lookup/blob/master/app/build.gradle]:
+My learning project in getting back to Android development: an app that searches for youtube video and play them with transcript. It surely is lame, but the point is rather to investigate modern [Android libraries](http://github.com/sonhanguyen/transcript-lookup/blob/master/app/build.gradle):
 
 Kotlin
 - Needless to say how awesome it is, the only downside so far is that Android Studio's autocomple really struggles with type inference in my 8G laptop.

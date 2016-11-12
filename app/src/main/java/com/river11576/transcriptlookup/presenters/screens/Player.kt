@@ -154,7 +154,7 @@ class YoutubePlayer(val uri: String, val startAt: Double? = null): AnkoComponent
     override fun onPlaybackRateChange(arg: String?) { }
 
     override fun onError(log: String?) { error(log) }
-    override fun logs(log: String?) { debug(log) }
+    override fun logs(log: String?) { /* debug(log) */ }
 }
 
 class PlayerScreen(val props: Key): AnkoComponent<Activity>, UseCaseFacilitator {
