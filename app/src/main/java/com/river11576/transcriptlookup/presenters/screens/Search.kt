@@ -16,7 +16,6 @@ import com.river11576.transcriptlookup.presenters.*
 import flow.Flow
 import org.jetbrains.anko.*
 import rx.Observable
-import rx.Observer
 import rx.android.schedulers.AndroidSchedulers
 import rx.schedulers.Schedulers
 import rx.subjects.PublishSubject
@@ -34,12 +33,12 @@ import java.util.*
 
 class SearchBar(val initialQuery: String=""): AnkoComponent<Context>, AnkoLogger, TextView.OnEditorActionListener {
     // this is a read-only stream to consumer, no need be exposed as a Subject
-    val queryEvents: Observable<String> = PublishSubject.create()
+    private val mQueryEvents = BehaviorSubject.create<String>(initialQuery)
+    val queryEvents = mQueryEvents.filter { it.isNotBlank() }
 
     override fun createView(ui: AnkoContext<Context>) = with(ui) {
         linearLayout {
             editText(initialQuery).lparams(matchParent, wrapContent).apply {
-                if(initialQuery.isNotEmpty()) fireQueryEvent(initialQuery)
                 isFocusableInTouchMode = true
                 requestFocus()
                 imeOptions = EditorInfo.IME_ACTION_SEARCH
@@ -49,7 +48,7 @@ class SearchBar(val initialQuery: String=""): AnkoComponent<Context>, AnkoLogger
         }
     }
 
-    private fun fireQueryEvent(query: String) = (queryEvents as Observer<String>).onNext(query)
+    private fun fireQueryEvent(query: String) = mQueryEvents.onNext(query)
 
     override fun onEditorAction(v: TextView, action: Int, e: KeyEvent?): Boolean {
         val query = "" + (v as EditText).editableText
@@ -71,15 +70,24 @@ class ResultList(private val data: ArrayList<Track>, val itemPresenterFactory: (
     {
     abstract class ResultPresenter(v: View): RecyclerView.ViewHolder(v) {
         abstract var track: Track?
+        abstract val clickEvents: Observable<Track>
     }
 
     fun consume(incomming: List<Track>) {
         data.addAll(incomming)
+        notifyLoadingFinished()
+    }
+
+    fun notifyLoadingFinished() {
         refreshLayout.apply {
             isRefreshing = false
             notifyDataSetChanged()
             invalidate()
         }
+    }
+
+    fun scrollTo(pos: Int) {
+        layoutReadyEvents.first().subscribe { it.scrollToPosition(pos) }
     }
 
     fun refresh() {
@@ -96,22 +104,25 @@ class ResultList(private val data: ArrayList<Track>, val itemPresenterFactory: (
             setOnRefreshListener(listener)
             refreshLayout = this
 
-            listView = recyclerView {
+            recyclerView {
                 lparams(matchParent, matchParent)
-                layoutManager = LinearLayoutManager(ctx)
+                layoutManager = LinearLayoutManager(ctx).apply { layoutReadyEvents.onNext(this) }
                 adapter = listener
             }
         }
     }
 
+    val navigationEvents: Observable<Int> = PublishSubject.create()
     val requestNextEvents: Observable<Int> = BehaviorSubject.create(50)
     override fun onRefresh(direction: SwipyRefreshLayoutDirection) {
         (requestNextEvents as BehaviorSubject<Int>).onNext(50)
     }
 
-    private lateinit var listView: RecyclerView
+    private var layoutReadyEvents = BehaviorSubject.create<RecyclerView.LayoutManager>()
 
-    override fun onCreateViewHolder(parent: ViewGroup?, viewType: Int) = itemPresenterFactory()
+    override fun onCreateViewHolder(parent: ViewGroup?, viewType: Int) = itemPresenterFactory().apply {
+        clickEvents.subscribe { (navigationEvents as PublishSubject<Int>).onNext(adapterPosition) }
+    }
 
     override fun getItemCount() = data.size
 
@@ -126,6 +137,8 @@ class ResultViewHolder(ctx: Context): ResultList.ResultPresenter(FrameLayout(ctx
         img.imageURI = Uri.parse(new!!.thumbnail)
     }
 
+    override val clickEvents: Observable<Track> = PublishSubject.create<Track>()
+
     init {
         with(itemView as FrameLayout) {
             setPadding(0, dip(8), 0, 0)
@@ -138,14 +151,15 @@ class ResultViewHolder(ctx: Context): ResultList.ResultPresenter(FrameLayout(ctx
 
                 linearLayout {
                     img = ankoView(::SimpleDraweeView, 0) {
-                        layoutParams = ViewGroup.LayoutParams(dip(100), wrapContent)
-                        aspectRatio = 1.33f
+                        layoutParams = ViewGroup.LayoutParams(dip(90), wrapContent)
+                        aspectRatio = 1.78f
                     }
 
                     title = textView {
                         setPadding(dip(3), 0, dip(3), 0)
                         onClick {
-                            Flow.get(this).set(PlayerScreen.Key(track!!.uri))
+                            (clickEvents as PublishSubject<Track>).onNext(track)
+                            Flow.get(ctx).set(PlayerScreen.Key(track!!.uri))
                         }
                     }
                 }
@@ -157,8 +171,14 @@ class ResultViewHolder(ctx: Context): ResultList.ResultPresenter(FrameLayout(ctx
     private lateinit var img: SimpleDraweeView
 }
 
-class SearchScreen(val props: Key): AnkoComponent<Activity>, UseCaseFacilitator {
-    class Key(val result: ArrayList<Track> = ArrayList<Track>(), var query: String="", var page: String ?= null)
+class SearchScreen(val props: Key): AnkoComponent<Activity>, UseCaseFacilitator, AnkoLogger {
+    class Key(
+        var query: String="",
+        var page: String ?= null,
+        val result: ArrayList<Track> = ArrayList<Track>(),
+        var lastSelected: Int = 0,
+        var total: Int? = null
+    )
 
     @Inject override lateinit var interactor: UseCases
 
@@ -166,17 +186,32 @@ class SearchScreen(val props: Key): AnkoComponent<Activity>, UseCaseFacilitator 
         val searchBar = SearchBar(props.query)
         val resultList = ResultList(props.result) { ResultViewHolder(ctx) }
 
+        resultList.navigationEvents.subscribe { props.lastSelected = it }
+
         Observable.combineLatest(
-            searchBar.queryEvents, resultList.requestNextEvents
-        ) { query, pageSize ->
-                if(props.query != query) resultList.refresh()
-                props.query = query
-                pageSize
+            searchBar.queryEvents,
+            resultList.requestNextEvents
+        ) { searchTerms, pageSize ->
+                with(props) {
+                    if(searchTerms != query) resultList.refresh()
+                    lastSelected.let { if(it > 0) resultList.scrollTo(it) }
+
+                    query = searchTerms
+
+                    pageSize
+                }
+            }
+            .filter {
+                (props.total?.let { props.result.size < it }?: true)
+                    .apply { if(!this) resultList.notifyLoadingFinished() }
             }
             .observeOn(Schedulers.io())
             .map { interactor.search(props.query, "en", it, props.page) }
             .observeOn(AndroidSchedulers.mainThread())
-            .doOnNext{ props.page = it.nextPageToken }
+            .doOnNext{
+                props.page = it.nextPageToken
+                props.total = it.total
+            }
             .subscribe {
                 resultList.consume(it.results)
             }
