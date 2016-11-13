@@ -27,10 +27,9 @@ class Youtube @Inject constructor(var transcripts: TranscriptRepository, var rea
                         realm.where(Track::class.java)
                             .equalTo("uri", id)
                             .findFirst()
-                            ?:run {
-                                it.snippet
-                                    .run { Track(id, title, description, thumbnails.default.url) }
-                                    .apply { realm.copyToRealm(this) }
+                            ?:run { with(it.snippet)
+                                { Track(id, title, description, thumbnails.default.url) }
+                                .apply { realm.copyToRealm(this) }
                             }
                     }
                     .apply { realm.commitTransaction() }
